@@ -1,0 +1,68 @@
+
+name: Test Workflow
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+
+
+  my_first_job:
+    name: scan_find_vulnerability
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo current branch
+        run: echo "$(date):Current branch is ${{ github.ref_name }}"
+      
+      - name: Checkout source
+        uses: actions/checkout@v2
+
+      - name: Run Trivy vulnerability scanner in repo mode
+        id: trivy_scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
+          output: 'trivy-results.txt'
+          severity: 'HIGH'
+
+  my_second_job:
+    name: fail_workflow
+    needs: my_first_job
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Slack Notification
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        with:
+          payload: |
+            {
+              "text": "Scan failed - Critical vulnerabilities found!",
+              "attachments": [
+                {
+                  "title": "Failed trivy scan, see uploaded report",
+                  "color": "#FF0000",
+                  "fields": [
+                    {
+                      "title": "Total High/Critical Issues",
+                      "value": "4 HIGH, 0 CRITICAL",
+                      "short": true
+                    }
+                  ],
+                  "footer": "CI/CD Pipeline | Scan Report"
+                }
+              ]
+            }
+
+      - name: Upload file
+        uses: MeilCli/slack-upload-file@v4
+        with:
+          slack_token: ${{ secrets.SLACK_TOKEN }}
+          channel_id: ${{ secrets.SLACK_CHANNEL_ID }}
+          file_path: 'trivy-results.txt'
+          initial_comment: 'post by slack-upload-file'
